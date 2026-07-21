@@ -5,12 +5,12 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite" // локальная БД для разработки
+  provider = "postgresql" // Postgres (Neon/Vercel)
   url      = env("DATABASE_URL")
 }
 
 /**
- * ==== Роли ====
+ * ===== Роли =====
  */
 enum Role {
   STUDENT
@@ -19,7 +19,7 @@ enum Role {
 }
 
 /**
- * ==== Доп. enum'ы для LMS ====
+ * ===== Доп. enum'ы для LMS =====
  */
 enum CourseVisibility {
   PRIVATE
@@ -117,6 +117,7 @@ model Account {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
+  @@index([userId])
 }
 
 model Session {
@@ -124,7 +125,10 @@ model Session {
   sessionToken String   @unique
   userId       String
   expires      DateTime
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model VerificationToken {
@@ -141,11 +145,11 @@ model VerificationToken {
 
 model Profile {
   id     String @id @default(cuid())
-  user   User   @relation(fields: [userId], references: [id])
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId String @unique
 
-  locale   String? // "ru", "en", ...
-  timezone String? // "Europe/Moscow", "Europe/Amsterdam", ...
+  locale   String?
+  timezone String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -155,15 +159,17 @@ model Profile {
 model ParentChild {
   id String @id @default(cuid())
 
-  parent   User   @relation("ParentLinksAsParent", fields: [parentId], references: [id])
+  parent   User   @relation("ParentLinksAsParent", fields: [parentId], references: [id], onDelete: Cascade)
   parentId String
 
-  child   User   @relation("ParentLinksAsChild", fields: [childId], references: [id])
+  child   User   @relation("ParentLinksAsChild", fields: [childId], references: [id], onDelete: Cascade)
   childId String
 
   createdAt DateTime @default(now())
 
   @@unique([parentId, childId])
+  @@index([parentId])
+  @@index([childId])
 }
 
 /**
@@ -175,14 +181,14 @@ model Course {
   slug        String           @unique
   title       String
   description String?
-  language    String? // "ru", "en", ...
-  level       String? // "Beginner", "A2", "C1", ...
+  language    String?
+  level       String?
   visibility  CourseVisibility @default(PRIVATE)
 
   priceCents Int?
-  currency   String? // "RUB", "USD", "KZT", ...
+  currency   String?
 
-  author   User   @relation("CourseAuthor", fields: [authorId], references: [id])
+  author   User   @relation("CourseAuthor", fields: [authorId], references: [id], onDelete: SetNull)
   authorId String
 
   sections      Section[]
@@ -192,11 +198,13 @@ model Course {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([authorId])
 }
 
 model Section {
   id       String @id @default(cuid())
-  course   Course @relation(fields: [courseId], references: [id])
+  course   Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
   courseId String
 
   title String
@@ -212,14 +220,14 @@ model Section {
 
 model Lesson {
   id        String  @id @default(cuid())
-  section   Section @relation(fields: [sectionId], references: [id])
+  section   Section @relation(fields: [sectionId], references: [id], onDelete: Cascade)
   sectionId String
 
   title String
   slug  String @unique
   order Int    @default(0)
 
-  contentJson Json? // можно хранить MD/JSON
+  contentJson Json?
   videoUrl    String?
   durationSec Int?
   isFree      Boolean @default(false)
@@ -239,9 +247,9 @@ model Lesson {
 
 model Enrollment {
   id       String @id @default(cuid())
-  user     User   @relation(fields: [userId], references: [id])
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId   String
-  course   Course @relation(fields: [courseId], references: [id])
+  course   Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
   courseId String
 
   status   EnrollmentStatus @default(ACTIVE)
@@ -251,6 +259,8 @@ model Enrollment {
   updatedAt DateTime @updatedAt
 
   @@unique([userId, courseId])
+  @@index([userId])
+  @@index([courseId])
 }
 
 /**
@@ -259,7 +269,7 @@ model Enrollment {
 
 model Assignment {
   id       String @id @default(cuid())
-  lesson   Lesson @relation(fields: [lessonId], references: [id])
+  lesson   Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
   lessonId String
 
   title String
@@ -270,14 +280,16 @@ model Assignment {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([lessonId])
 }
 
 model Submission {
   id           String     @id @default(cuid())
-  assignment   Assignment @relation(fields: [assignmentId], references: [id])
+  assignment   Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
   assignmentId String
 
-  author   User   @relation(fields: [authorId], references: [id])
+  author   User   @relation(fields: [authorId], references: [id], onDelete: Cascade)
   authorId String
 
   text     String?
@@ -299,7 +311,7 @@ model Submission {
 
 model Quiz {
   id       String @id @default(cuid())
-  lesson   Lesson @relation(fields: [lessonId], references: [id])
+  lesson   Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
   lessonId String @unique
 
   title     String
@@ -308,17 +320,19 @@ model Quiz {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([lessonId])
 }
 
 model QuizQuestion {
   id     String @id @default(cuid())
-  quiz   Quiz   @relation(fields: [quizId], references: [id])
+  quiz   Quiz   @relation(fields: [quizId], references: [id], onDelete: Cascade)
   quizId String
 
   order         Int              @default(0)
   type          QuizQuestionType
   prompt        String
-  answerKeyText String? // для TEXT
+  answerKeyText String?
 
   choices QuizChoice[]
 
@@ -327,19 +341,21 @@ model QuizQuestion {
 
 model QuizChoice {
   id         String       @id @default(cuid())
-  question   QuizQuestion @relation(fields: [questionId], references: [id])
+  question   QuizQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
   questionId String
 
   text      String
   isCorrect Boolean @default(false)
+
+  @@index([questionId])
 }
 
 model QuizAttempt {
   id     String @id @default(cuid())
-  quiz   Quiz   @relation(fields: [quizId], references: [id])
+  quiz   Quiz   @relation(fields: [quizId], references: [id], onDelete: Cascade)
   quizId String
 
-  user   User   @relation(fields: [userId], references: [id])
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId String
 
   score      Float?
@@ -355,27 +371,33 @@ model QuizAttempt {
 
 model Conversation {
   id       String  @id @default(cuid())
-  course   Course? @relation(fields: [courseId], references: [id])
+  course   Course? @relation(fields: [courseId], references: [id], onDelete: Cascade)
   courseId String?
 
-  createdBy   User   @relation("ConversationCreatedBy", fields: [createdById], references: [id])
+  createdBy   User   @relation("ConversationCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
   createdById String
 
   messages Message[]
 
   createdAt DateTime @default(now())
+
+  @@index([courseId])
+  @@index([createdById])
 }
 
 model Message {
   id             String       @id @default(cuid())
-  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   conversationId String
 
-  sender   User   @relation(fields: [senderId], references: [id])
+  sender   User   @relation(fields: [senderId], references: [id], onDelete: Cascade)
   senderId String
 
   content   String
   createdAt DateTime @default(now())
+
+  @@index([conversationId])
+  @@index([senderId])
 }
 
 /**
@@ -384,17 +406,17 @@ model Message {
 
 model Payment {
   id     String @id @default(cuid())
-  user   User   @relation(fields: [userId], references: [id])
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId String
 
-  course   Course @relation(fields: [courseId], references: [id])
+  course   Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
   courseId String
 
   amountCents Int
   currency    String
-  provider    String // "Stripe" | "YooKassa" | "PayPal" | ...
+  provider    String
   status      PaymentStatus @default(PENDING)
-  externalId  String? // ID транзакции у провайдера
+  externalId  String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

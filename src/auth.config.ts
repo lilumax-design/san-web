@@ -1,11 +1,12 @@
-import type { NextAuthConfig } from "next-auth";
 import { PrismaAdapter } from "@auth/prisma-adapter";
-import Google from "next-auth/providers/google";
-import Apple from "next-auth/providers/apple";
+import { Role } from "@prisma/client";
+import type { NextAuthConfig } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
-import { prisma } from "@/lib/prisma";
-import { verifyPassword } from "@/lib/crypto";
+import Google from "next-auth/providers/google";
 import { z } from "zod";
+
+import { verifyPassword } from "@/lib/crypto";
+import { prisma } from "@/lib/prisma";
 
 const credentialsSchema = z.object({
   email: z.string().trim().toLowerCase().email(),
@@ -14,53 +15,103 @@ const credentialsSchema = z.object({
 
 const config: NextAuthConfig = {
   adapter: PrismaAdapter(prisma),
-  session: { strategy: "jwt" },
-  pages: { signIn: "/auth/sign-in" },
+
+  session: {
+    strategy: "jwt",
+  },
+
+  pages: {
+    signIn: "/auth/sign-in",
+  },
+
   providers: [
-    Google, 
-    Apple,  
+    Google({
+      clientId: process.env.AUTH_GOOGLE_ID,
+      clientSecret: process.env.AUTH_GOOGLE_SECRET,
+    }),
+
     Credentials({
       name: "Email & Password",
-      async authorize(raw) {
-        const parsed = credentialsSchema.safeParse(raw);
-        if (!parsed.success) return null;
 
-        const email = parsed.data.email;
-        const password = parsed.data.password;
+      credentials: {
+        email: {
+          label: "Email",
+          type: "email",
+        },
+        password: {
+          label: "Пароль",
+          type: "password",
+        },
+      },
 
-        const user = await prisma.user.findUnique({ where: { email } });
-        if (!user || !user.passwordHash) return null;
+      async authorize(rawCredentials) {
+        const parsed = credentialsSchema.safeParse(rawCredentials);
 
-        const ok = await verifyPassword(password, user.passwordHash);
-        if (!ok) return null;
+        if (!parsed.success) {
+          return null;
+        }
+
+        const { email, password } = parsed.data;
+
+        const user = await prisma.user.findUnique({
+          where: {
+            email,
+          },
+        });
+
+        if (!user?.email || !user.passwordHash) {
+          return null;
+        }
+
+        const passwordIsValid = await verifyPassword(
+          password,
+          user.passwordHash
+        );
+
+        if (!passwordIsValid) {
+          return null;
+        }
 
         return {
           id: user.id,
-          email: user.email!,
-          name: user.name ?? null,
-          image: user.image ?? null,
-          role: user.role, 
+          email: user.email,
+          name: user.name,
+          image: user.image,
+          role: user.role,
         };
       },
     }),
   ],
+
   callbacks: {
     async jwt({ token, user }) {
-    
-      if (user) token.role = (user as any).role ?? "STUDENT";
+      if (user) {
+        token.role = user.role ?? Role.STUDENT;
+      }
 
       if (!token.role && token.sub) {
-        const dbUser = await prisma.user.findUnique({
-          where: { id: token.sub },
-          select: { role: true },
+        const databaseUser = await prisma.user.findUnique({
+          where: {
+            id: token.sub,
+          },
+          select: {
+            role: true,
+          },
         });
-        token.role = dbUser?.role ?? "STUDENT";
+
+        token.role = databaseUser?.role ?? Role.STUDENT;
       }
+
       return token;
     },
+
     async session({ session, token }) {
-      if (token?.sub) (session.user as any).id = token.sub;
-      if (token?.role) (session.user as any).role = token.role; // ✅ роль в сессии
+      if (token.sub) {
+        session.user.id = token.sub;
+      }
+
+      session.user.role = token.role ?? Role.STUDENT;
+
       return session;
     },
   },

@@ -1,17 +1,23 @@
-import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 
-export default async function AfterLogin() {
+import { auth } from "@/auth";
+
+export default async function AfterLoginPage() {
   const session = await auth();
 
-  if (!session?.user) redirect("/auth/sign-in");
+  if (!session?.user) {
+    redirect("/auth/sign-in");
+  }
 
-  // @ts-expect-error custom
-  const role = session.user.role as string;
+  const role = session.user.role;
 
-  if (role === "ADMIN") redirect("/admin");
-  if (role === "TEACHER") redirect("/teacher/courses");
+  if (role === "ADMIN") {
+    redirect("/admin");
+  }
 
-  // STUDENT / PARENT или прочие — в общий кабинет
+  if (role === "TEACHER") {
+    redirect("/teacher/courses");
+  }
+
   redirect("/dashboard");
 }

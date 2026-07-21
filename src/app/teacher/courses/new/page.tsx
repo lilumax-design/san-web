@@ -3,45 +3,92 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
+type CourseVisibility = "PRIVATE" | "UNLISTED" | "PUBLIC";
+
+type NewCourseForm = {
+  title: string;
+  description: string;
+  language: string;
+  level: string;
+  priceCents: string;
+  currency: string;
+  visibility: CourseVisibility;
+};
+
+type ErrorResponse = {
+  error?: string;
+};
+
+const initialForm: NewCourseForm = {
+  title: "",
+  description: "",
+  language: "ru",
+  level: "",
+  priceCents: "",
+  currency: "RUB",
+  visibility: "PRIVATE",
+};
+
 export default function NewCoursePage() {
   const router = useRouter();
-  const [loading, setLoading] = useState(false);
-  const [form, setForm] = useState({
-    title: "",
-    description: "",
-    language: "ru",
-    level: "",
-    priceCents: "",
-    currency: "RUB",
-    visibility: "PRIVATE",
-  });
 
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setLoading(true);
+  const [loading, setLoading] = useState(false);
+  const [form, setForm] = useState<NewCourseForm>(initialForm);
+  const [error, setError] = useState<string | null>(null);
+
+  function updateForm<K extends keyof NewCourseForm>(
+    field: K,
+    value: NewCourseForm[K]
+  ) {
+    setForm((currentForm) => ({
+      ...currentForm,
+      [field]: value,
+    }));
+  }
+
+  async function onSubmit(
+    event: React.FormEvent<HTMLFormElement>
+  ) {
+    event.preventDefault();
+
     try {
-      const res = await fetch("/api/courses", {
+      setLoading(true);
+      setError(null);
+
+      const response = await fetch("/api/courses", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({
           ...form,
-          priceCents: form.priceCents ? Number(form.priceCents) : null,
+          priceCents:
+            form.priceCents.trim() === ""
+              ? null
+              : Number(form.priceCents),
         }),
       });
 
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        alert(data?.error || "Ошибка при создании курса");
-        setLoading(false);
-        return;
+      if (!response.ok) {
+        const data = (await response
+          .json()
+          .catch(() => ({}))) as ErrorResponse;
+
+        throw new Error(
+          data.error ?? "Ошибка при создании курса."
+        );
       }
 
-      const data = await res.json();
-      // после создания — обратно к списку
       router.push("/teacher/courses");
-    } catch (err) {
-      console.error(err);
-      alert("Сетевая ошибка");
+      router.refresh();
+    } catch (caughtError) {
+      const message =
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Произошла сетевая ошибка.";
+
+      console.error("Создание курса:", caughtError);
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -49,88 +96,170 @@ export default function NewCoursePage() {
 
   return (
     <div className="mx-auto max-w-2xl p-6">
-      <h1 className="text-2xl font-bold mb-4">Новый курс</h1>
+      <h1 className="mb-4 text-2xl font-bold">
+        Новый курс
+      </h1>
 
       <form onSubmit={onSubmit} className="space-y-4">
+        {error && (
+          <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            {error}
+          </div>
+        )}
+
         <div>
-          <label className="block text-sm mb-1">Название*</label>
+          <label
+            htmlFor="title"
+            className="mb-1 block text-sm"
+          >
+            Название*
+          </label>
+
           <input
+            id="title"
             className="w-full rounded border px-3 py-2"
             value={form.title}
-            onChange={(e) => setForm({ ...form, title: e.target.value })}
+            onChange={(event) =>
+              updateForm("title", event.target.value)
+            }
             required
-            placeholder="Напр., Spotlight 8 — Unit 2D"
+            placeholder="Например, Английский язык: уровень A2"
           />
         </div>
 
         <div>
-          <label className="block text-sm mb-1">Описание</label>
+          <label
+            htmlFor="description"
+            className="mb-1 block text-sm"
+          >
+            Описание
+          </label>
+
           <textarea
+            id="description"
             className="w-full rounded border px-3 py-2"
             value={form.description}
-            onChange={(e) =>
-              setForm({ ...form, description: e.target.value })
+            onChange={(event) =>
+              updateForm("description", event.target.value)
             }
             rows={4}
             placeholder="Краткое описание курса"
           />
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div>
-            <label className="block text-sm mb-1">Язык</label>
+            <label
+              htmlFor="language"
+              className="mb-1 block text-sm"
+            >
+              Язык
+            </label>
+
             <input
+              id="language"
               className="w-full rounded border px-3 py-2"
               value={form.language}
-              onChange={(e) => setForm({ ...form, language: e.target.value })}
+              onChange={(event) =>
+                updateForm("language", event.target.value)
+              }
               placeholder="ru"
             />
           </div>
+
           <div>
-            <label className="block text-sm mb-1">Уровень</label>
+            <label
+              htmlFor="level"
+              className="mb-1 block text-sm"
+            >
+              Уровень
+            </label>
+
             <input
+              id="level"
               className="w-full rounded border px-3 py-2"
               value={form.level}
-              onChange={(e) => setForm({ ...form, level: e.target.value })}
+              onChange={(event) =>
+                updateForm("level", event.target.value)
+              }
               placeholder="A2 / B1 / C1 / Beginner"
             />
           </div>
+
           <div>
-            <label className="block text-sm mb-1">Видимость</label>
+            <label
+              htmlFor="visibility"
+              className="mb-1 block text-sm"
+            >
+              Видимость
+            </label>
+
             <select
+              id="visibility"
               className="w-full rounded border px-3 py-2"
               value={form.visibility}
-              onChange={(e) =>
-                setForm({ ...form, visibility: e.target.value })
+              onChange={(event) =>
+                updateForm(
+                  "visibility",
+                  event.target.value as CourseVisibility
+                )
               }
             >
-              <option value="PRIVATE">PRIVATE</option>
-              <option value="UNLISTED">UNLISTED</option>
-              <option value="PUBLIC">PUBLIC</option>
+              <option value="PRIVATE">
+                Приватный
+              </option>
+              <option value="UNLISTED">
+                По прямой ссылке
+              </option>
+              <option value="PUBLIC">
+                Публичный
+              </option>
             </select>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
-            <label className="block text-sm mb-1">Цена (в копейках)</label>
+            <label
+              htmlFor="priceCents"
+              className="mb-1 block text-sm"
+            >
+              Цена в копейках
+            </label>
+
             <input
+              id="priceCents"
               className="w-full rounded border px-3 py-2"
               type="number"
-              min={0}
-              placeholder="например 99000 → 990 ₽"
+              min="0"
+              step="1"
+              placeholder="Например, 99000 = 990 ₽"
               value={form.priceCents}
-              onChange={(e) =>
-                setForm({ ...form, priceCents: e.target.value })
+              onChange={(event) =>
+                updateForm("priceCents", event.target.value)
               }
             />
           </div>
+
           <div>
-            <label className="block text-sm mb-1">Валюта</label>
+            <label
+              htmlFor="currency"
+              className="mb-1 block text-sm"
+            >
+              Валюта
+            </label>
+
             <input
+              id="currency"
               className="w-full rounded border px-3 py-2"
+              maxLength={3}
               value={form.currency}
-              onChange={(e) => setForm({ ...form, currency: e.target.value })}
+              onChange={(event) =>
+                updateForm(
+                  "currency",
+                  event.target.value.toUpperCase()
+                )
+              }
               placeholder="RUB"
             />
           </div>
@@ -139,9 +268,9 @@ export default function NewCoursePage() {
         <button
           type="submit"
           disabled={loading}
-          className="rounded-lg bg-black px-4 py-2 text-white disabled:opacity-60"
+          className="rounded-lg bg-black px-4 py-2 text-white disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {loading ? "Создаём..." : "Создать курс"}
+          {loading ? "Создаём…" : "Создать курс"}
         </button>
       </form>
     </div>

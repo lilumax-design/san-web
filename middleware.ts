@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { auth } from "./auth";
+import { auth } from "@/auth";
 
 export async function middleware(req: Request) {
   const url = new URL(req.url);

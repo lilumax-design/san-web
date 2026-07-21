@@ -1,7 +1,9 @@
 import "./globals.css";
+
 import type { Metadata } from "next";
 import Link from "next/link";
 import { SessionProvider } from "next-auth/react";
+
 import { auth } from "@/auth";
 
 export const metadata: Metadata = {
@@ -11,33 +13,33 @@ export const metadata: Metadata = {
 
 export default async function RootLayout({
   children,
-}: {
+}: Readonly<{
   children: React.ReactNode;
-}) {
+}>) {
   const session = await auth();
 
   const firstName =
-    (session?.user?.name || "")
-      .trim()
+    session?.user?.name
+      ?.trim()
       .split(" ")
-      .filter(Boolean)[0] || null;
+      .filter(Boolean)[0] ?? null;
 
   return (
     <html lang="ru">
       <body className="min-h-screen bg-white text-gray-900">
-        <SessionProvider session={session as any}>
+        <SessionProvider session={session}>
           <header className="border-b">
-            <nav className="mx-auto max-w-6xl px-4 py-4 flex items-center justify-between">
+            <nav className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
               <Link href="/" className="text-xl font-bold">
                 SAN
               </Link>
 
-              <div className="flex items-center gap-3 sm:gap-6 text-sm">
+              <div className="flex items-center gap-3 text-sm sm:gap-6">
                 <Link href="/courses" className="hover:underline">
                   Курсы
                 </Link>
 
-                {session ? (
+                {session?.user ? (
                   <>
                     <Link href="/dashboard" className="hover:underline">
                       Кабинет
@@ -55,29 +57,40 @@ export default async function RootLayout({
                         <Link href="/admin" className="hover:underline">
                           Админ
                         </Link>
-                        <Link href="/admin/users" className="hover:underline">
+
+                        <Link
+                          href="/admin/users"
+                          className="hover:underline"
+                        >
                           Пользователи
                         </Link>
                       </>
                     )}
 
                     {firstName && (
-                      <span className="hidden sm:inline text-gray-500">
+                      <span className="hidden text-gray-500 sm:inline">
                         Здравствуйте, {firstName}!
                       </span>
                     )}
 
                     <form action="/api/auth/signout" method="post">
-                      <button className="rounded-lg border px-3 py-1.5 hover:bg-gray-50">
+                      <button
+                        type="submit"
+                        className="rounded-lg border px-3 py-1.5 hover:bg-gray-50"
+                      >
                         Выйти
                       </button>
                     </form>
                   </>
                 ) : (
                   <>
-                    <Link href="/auth/sign-in" className="hover:underline">
+                    <Link
+                      href="/auth/sign-in"
+                      className="hover:underline"
+                    >
                       Войти
                     </Link>
+
                     <Link
                       href="/auth/sign-up"
                       className="rounded-lg border px-3 py-1.5 hover:bg-gray-50"
@@ -90,7 +103,9 @@ export default async function RootLayout({
             </nav>
           </header>
 
-          <main className="mx-auto max-w-6xl px-4 py-8">{children}</main>
+          <main className="mx-auto max-w-6xl px-4 py-8">
+            {children}
+          </main>
 
           <footer className="border-t">
             <div className="mx-auto max-w-6xl px-4 py-8 text-sm text-gray-500">

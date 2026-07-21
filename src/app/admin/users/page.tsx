@@ -1,60 +1,134 @@
+import { Role } from "@prisma/client";
+import { revalidatePath } from "next/cache";
+
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { revalidatePath } from "next/cache";
+
+const allowedRoles: Role[] = [
+  Role.STUDENT,
+  Role.TEACHER,
+  Role.ADMIN,
+];
+
+function isRole(value: string): value is Role {
+  return allowedRoles.includes(value as Role);
+}
 
 async function updateUserRole(formData: FormData) {
   "use server";
+
   const session = await auth();
-  if (!session || session.user.role !== "ADMIN") throw new Error("Forbidden");
 
-  const userId = String(formData.get("userId") || "");
-  const role = String(formData.get("role") || "");
-  if (!userId || !["STUDENT", "TEACHER", "ADMIN"].includes(role)) throw new Error("Invalid payload");
+  if (!session || session.user.role !== Role.ADMIN) {
+    throw new Error("Доступ запрещён.");
+  }
 
-  await prisma.user.update({ where: { id: userId }, data: { role: role as any } });
+  const userId = String(formData.get("userId") ?? "").trim();
+  const roleValue = String(formData.get("role") ?? "").trim();
+
+  if (!userId || !isRole(roleValue)) {
+    throw new Error("Некорректные данные.");
+  }
+
+  await prisma.user.update({
+    where: {
+      id: userId,
+    },
+    data: {
+      role: roleValue,
+    },
+  });
+
   revalidatePath("/admin/users");
 }
 
 export default async function AdminUsersPage() {
   const session = await auth();
-  if (!session || session.user.role !== "ADMIN") return null;
+
+  if (!session || session.user.role !== Role.ADMIN) {
+    return null;
+  }
 
   const users = await prisma.user.findMany({
-    orderBy: { createdAt: "desc" },
-    select: { id: true, name: true, email: true, role: true, createdAt: true },
+    orderBy: {
+      createdAt: "desc",
+    },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      role: true,
+      createdAt: true,
+    },
   });
 
   return (
     <main className="p-6">
-      <h1 className="text-2xl font-semibold mb-4">Пользователи</h1>
+      <h1 className="mb-4 text-2xl font-semibold">
+        Пользователи
+      </h1>
 
       <div className="overflow-x-auto">
-        <table className="min-w-[700px] w-full border">
+        <table className="w-full min-w-[700px] border">
           <thead>
             <tr className="bg-gray-50 text-left">
-              <th className="px-3 py-2 border-r">Имя</th>
-              <th className="px-3 py-2 border-r">Email</th>
-              <th className="px-3 py-2 border-r">Роль</th>
+              <th className="border-r px-3 py-2">Имя</th>
+              <th className="border-r px-3 py-2">Email</th>
+              <th className="border-r px-3 py-2">Роль</th>
               <th className="px-3 py-2">Создан</th>
             </tr>
           </thead>
+
           <tbody>
-            {users.map((u) => (
-              <tr key={u.id} className="border-t">
-                <td className="px-3 py-2 border-r">{u.name ?? "—"}</td>
-                <td className="px-3 py-2 border-r">{u.email ?? "—"}</td>
-                <td className="px-3 py-2 border-r">
-                  <form action={updateUserRole} className="flex items-center gap-2">
-                    <input type="hidden" name="userId" value={u.id} />
-                    <select name="role" defaultValue={u.role} className="border rounded px-2 py-1">
-                      <option value="STUDENT">STUDENT</option>
-                      <option value="TEACHER">TEACHER</option>
-                      <option value="ADMIN">ADMIN</option>
+            {users.map((user) => (
+              <tr key={user.id} className="border-t">
+                <td className="border-r px-3 py-2">
+                  {user.name ?? "—"}
+                </td>
+
+                <td className="border-r px-3 py-2">
+                  {user.email ?? "—"}
+                </td>
+
+                <td className="border-r px-3 py-2">
+                  <form
+                    action={updateUserRole}
+                    className="flex items-center gap-2"
+                  >
+                    <input
+                      type="hidden"
+                      name="userId"
+                      value={user.id}
+                    />
+
+                    <select
+                      name="role"
+                      defaultValue={user.role}
+                      className="rounded border px-2 py-1"
+                    >
+                      <option value={Role.STUDENT}>
+                        STUDENT
+                      </option>
+                      <option value={Role.TEACHER}>
+                        TEACHER
+                      </option>
+                      <option value={Role.ADMIN}>
+                        ADMIN
+                      </option>
                     </select>
-                    <button className="border rounded px-2 py-1">Сохранить</button>
+
+                    <button
+                      type="submit"
+                      className="rounded border px-2 py-1"
+                    >
+                      Сохранить
+                    </button>
                   </form>
                 </td>
-                <td className="px-3 py-2">{new Date(u.createdAt).toLocaleString()}</td>
+
+                <td className="px-3 py-2">
+                  {user.createdAt.toLocaleString("ru-RU")}
+                </td>
               </tr>
             ))}
           </tbody>

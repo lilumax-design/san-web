@@ -1,41 +1,116 @@
+import { Role } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+
 import { hashPassword } from "@/lib/crypto";
+import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
 
-export async function POST(req: NextRequest) {
-  const { email, password, name } = await req.json().catch(() => ({} as any));
+type SignUpRequestBody = {
+  email?: unknown;
+  password?: unknown;
+  name?: unknown;
+};
 
-  const normalizedEmail =
-    typeof email === "string" ? email.trim().toLowerCase() : "";
+export async function POST(request: NextRequest) {
+  let body: SignUpRequestBody;
 
-  if (!normalizedEmail || typeof password !== "string" || password.length < 6) {
-    return NextResponse.json({ ok: false, error: "Invalid payload" }, { status: 400 });
+  try {
+    body = (await request.json()) as SignUpRequestBody;
+  } catch {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "Некорректный формат запроса.",
+      },
+      {
+        status: 400,
+      }
+    );
   }
 
-  const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+  const normalizedEmail =
+    typeof body.email === "string"
+      ? body.email.trim().toLowerCase()
+      : "";
+
+  const password =
+    typeof body.password === "string" ? body.password : "";
+
+  const normalizedName =
+    typeof body.name === "string" && body.name.trim().length > 0
+      ? body.name.trim()
+      : null;
+
+  if (!normalizedEmail || password.length < 6) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error:
+          "Укажите корректный email и пароль длиной не менее 6 символов.",
+      },
+      {
+        status: 400,
+      }
+    );
+  }
+
+  const existingUser = await prisma.user.findUnique({
+    where: {
+      email: normalizedEmail,
+    },
+  });
+
   const passwordHash = await hashPassword(password);
 
-  if (!existing) {
+  if (!existingUser) {
     await prisma.user.create({
       data: {
         email: normalizedEmail,
-        name: typeof name === "string" ? name : null,
+        name: normalizedName,
         passwordHash,
-        role: "STUDENT", 
+        role: Role.STUDENT,
       },
     });
-    return NextResponse.json({ ok: true }, { status: 201 });
+
+    return NextResponse.json(
+      {
+        ok: true,
+      },
+      {
+        status: 201,
+      }
+    );
   }
 
-  if (!existing.passwordHash) {
+  if (!existingUser.passwordHash) {
     await prisma.user.update({
-      where: { id: existing.id },
-      data: { passwordHash },
+      where: {
+        id: existingUser.id,
+      },
+      data: {
+        name: existingUser.name ?? normalizedName,
+        passwordHash,
+      },
     });
-    return NextResponse.json({ ok: true }, { status: 200 });
+
+    return NextResponse.json(
+      {
+        ok: true,
+      },
+      {
+        status: 200,
+      }
+    );
   }
 
-  return NextResponse.json({ ok: false, error: "User already exists" }, { status: 409 });
+  return NextResponse.json(
+    {
+      ok: false,
+      error: "Пользователь с таким email уже существует.",
+    },
+    {
+      status: 409,
+    }
+  );
 }
